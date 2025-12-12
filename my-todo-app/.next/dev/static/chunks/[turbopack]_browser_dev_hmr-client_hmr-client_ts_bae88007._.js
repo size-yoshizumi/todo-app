@@ -1,0 +1,7 @@
+(globalThis.TURBOPACK || (globalThis.TURBOPACK = [])).push([typeof document === "object" ? document.currentScript : undefined,
+"[turbopack]/browser/dev/hmr-client/hmr-client.ts [app-client] (ecmascript, async loader)", (() => {{
+
+throw new Error("An error occurred while generating the chunk item [turbopack]/browser/dev/hmr-client/hmr-client.ts [app-client] (ecmascript, async loader)\n\nCaused by:\n- Cell CellId { type_id: ValueTypeId { id: 365, name: ValueType { name: \"turbopack_core::module_graph::SingleModuleGraph\", dbg: \"(trait fn)\", dbg_depth: \"(trait fn)\" } }, index: 0 } no longer exists in task SingleModuleGraph::new_with_entries_visited_intern (no cell of this type exists)\n\nDebug info:\n- An error occurred while generating the chunk item [turbopack]/browser/dev/hmr-client/hmr-client.ts [app-client] (ecmascript, async loader)\n- Execution of <AsyncLoaderChunkItem as EcmascriptChunkItem>::content failed\n- Execution of AsyncLoaderChunkItem::chunks_data failed\n- Execution of AsyncLoaderChunkItem::chunk_group failed\n- Execution of ModuleGraph::module_batches failed\n- Execution of ModuleGraph::chunk_group_info failed\n- Cell CellId { type_id: ValueTypeId { id: 365, name: ValueType { name: \"turbopack_core::module_graph::SingleModuleGraph\", dbg: \"(trait fn)\", dbg_depth: \"(trait fn)\" } }, index: 0 } no longer exists in task SingleModuleGraph::new_with_entries_visited_intern (no cell of this type exists)");
+
+}}),
+]);
