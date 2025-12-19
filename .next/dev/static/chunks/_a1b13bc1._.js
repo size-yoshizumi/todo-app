@@ -19,24 +19,32 @@ function Home() {
     const [draggedId, setDraggedId] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(null);
     const [filter, setFilter] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])('all');
     const [newlyAddedId, setNewlyAddedId] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(null);
-    const handleAddTodo = ()=>{
-        const trimmedText = inputText.trim();
-        if (trimmedText === '') {
-            return;
+    const [isLoading, setIsLoading] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(true);
+    // APIからTODOを取得
+    const fetchTodos = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useCallback"])({
+        "Home.useCallback[fetchTodos]": async ()=>{
+            try {
+                const response = await fetch('/api/todos');
+                if (response.ok) {
+                    const data = await response.json();
+                    setTodos(data);
+                }
+            } catch (error) {
+                console.error('Failed to fetch todos:', error);
+            } finally{
+                setIsLoading(false);
+            }
         }
-        const newTodo = {
-            id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            text: trimmedText,
-            createdAt: new Date(),
-            completed: false
-        };
-        setNewlyAddedId(newTodo.id);
-        setTodos([
-            newTodo,
-            ...todos
-        ]);
-        setInputText('');
-    };
+    }["Home.useCallback[fetchTodos]"], []);
+    // 初回読み込み時にTODOを取得
+    (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useEffect"])({
+        "Home.useEffect": ()=>{
+            fetchTodos();
+        }
+    }["Home.useEffect"], [
+        fetchTodos
+    ]);
+    // 新規追加アニメーション用
     (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useEffect"])({
         "Home.useEffect": ()=>{
             if (newlyAddedId) {
@@ -44,7 +52,7 @@ function Home() {
                     "Home.useEffect.timer": ()=>{
                         setNewlyAddedId(null);
                     }
-                }["Home.useEffect.timer"], 600); // アニメーション時間に合わせて調整
+                }["Home.useEffect.timer"], 600);
                 return ({
                     "Home.useEffect": ()=>clearTimeout(timer)
                 })["Home.useEffect"];
@@ -53,14 +61,53 @@ function Home() {
     }["Home.useEffect"], [
         newlyAddedId
     ]);
+    // TODO追加
+    const handleAddTodo = async ()=>{
+        const trimmedText = inputText.trim();
+        if (trimmedText === '') {
+            return;
+        }
+        try {
+            const response = await fetch('/api/todos', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    text: trimmedText
+                })
+            });
+            if (response.ok) {
+                const newTodo = await response.json();
+                setNewlyAddedId(newTodo.id);
+                setTodos([
+                    newTodo,
+                    ...todos
+                ]);
+                setInputText('');
+            }
+        } catch (error) {
+            console.error('Failed to add todo:', error);
+        }
+    };
     const handleKeyPress = (e)=>{
         if (e.key === 'Enter') {
             handleAddTodo();
         }
     };
-    const handleDeleteTodo = (id)=>{
+    // TODO削除
+    const handleDeleteTodo = async (id)=>{
         if (window.confirm('このTODOを削除してもよろしいですか？')) {
-            setTodos(todos.filter((todo)=>todo.id !== id));
+            try {
+                const response = await fetch(`/api/todos/${id}`, {
+                    method: 'DELETE'
+                });
+                if (response.ok) {
+                    setTodos(todos.filter((todo)=>todo.id !== id));
+                }
+            } catch (error) {
+                console.error('Failed to delete todo:', error);
+            }
         }
     };
     const handleDragStart = (e, id)=>{
@@ -81,7 +128,8 @@ function Home() {
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
     };
-    const handleDrop = (e, targetId)=>{
+    // ドラッグ&ドロップで並び替え
+    const handleDrop = async (e, targetId)=>{
         e.preventDefault();
         const draggedTodoId = e.dataTransfer.getData('text/html');
         if (draggedTodoId === targetId) {
@@ -99,24 +147,63 @@ function Home() {
         newTodos.splice(targetIndex, 0, removed);
         setTodos(newTodos);
         setDraggedId(null);
+        // APIで並び順を更新
+        try {
+            await fetch('/api/todos/reorder', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    todoIds: newTodos.map((t)=>t.id)
+                })
+            });
+        } catch (error) {
+            console.error('Failed to reorder todos:', error);
+        }
     };
-    const handleToggleComplete = (id)=>{
+    // 完了状態の切り替え
+    const handleToggleComplete = async (id)=>{
         const todo = todos.find((t)=>t.id === id);
         if (!todo) return;
-        const updatedTodos = todos.map((t)=>t.id === id ? {
-                ...t,
-                completed: !t.completed
-            } : t);
-        // "全て"フィルター選択時、完了にしたら一番上に移動
-        if (filter === 'all' && !todo.completed) {
-            const completedTodo = updatedTodos.find((t)=>t.id === id);
-            const otherTodos = updatedTodos.filter((t)=>t.id !== id);
-            setTodos([
-                completedTodo,
-                ...otherTodos
-            ]);
-        } else {
-            setTodos(updatedTodos);
+        try {
+            const response = await fetch(`/api/todos/${id}`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    completed: !todo.completed
+                })
+            });
+            if (response.ok) {
+                const updatedTodo = await response.json();
+                const updatedTodos = todos.map((t)=>t.id === id ? updatedTodo : t);
+                // "全て"フィルター選択時、完了にしたら一番上に移動
+                if (filter === 'all' && !todo.completed) {
+                    const completedTodo = updatedTodos.find((t)=>t.id === id);
+                    const otherTodos = updatedTodos.filter((t)=>t.id !== id);
+                    const reorderedTodos = [
+                        completedTodo,
+                        ...otherTodos
+                    ];
+                    setTodos(reorderedTodos);
+                    // 並び順を更新
+                    await fetch('/api/todos/reorder', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            todoIds: reorderedTodos.map((t)=>t.id)
+                        })
+                    });
+                } else {
+                    setTodos(updatedTodos);
+                }
+            }
+        } catch (error) {
+            console.error('Failed to toggle todo:', error);
         }
     };
     const filteredTodos = todos.filter((todo)=>{
@@ -124,6 +211,34 @@ function Home() {
         if (filter === 'completed') return todo.completed;
         return true;
     });
+    // 日時のフォーマット
+    const formatDate = (dateString)=>{
+        return new Date(dateString).toLocaleString('ja-JP');
+    };
+    if (isLoading) {
+        return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+            className: "min-h-screen bg-background text-foreground p-8 flex items-center justify-center",
+            children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                className: "text-center",
+                children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
+                    className: "text-gray-500",
+                    children: "読み込み中..."
+                }, void 0, false, {
+                    fileName: "[project]/app/page.tsx",
+                    lineNumber: 221,
+                    columnNumber: 11
+                }, this)
+            }, void 0, false, {
+                fileName: "[project]/app/page.tsx",
+                lineNumber: 220,
+                columnNumber: 9
+            }, this)
+        }, void 0, false, {
+            fileName: "[project]/app/page.tsx",
+            lineNumber: 219,
+            columnNumber: 7
+        }, this);
+    }
     return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
         className: "min-h-screen bg-background text-foreground p-8",
         children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -134,7 +249,7 @@ function Home() {
                     children: "TODOアプリ"
                 }, void 0, false, {
                     fileName: "[project]/app/page.tsx",
-                    lineNumber: 131,
+                    lineNumber: 230,
                     columnNumber: 9
                 }, this),
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -149,7 +264,7 @@ function Home() {
                             className: "flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800"
                         }, void 0, false, {
                             fileName: "[project]/app/page.tsx",
-                            lineNumber: 135,
+                            lineNumber: 234,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -158,13 +273,13 @@ function Home() {
                             children: "追加"
                         }, void 0, false, {
                             fileName: "[project]/app/page.tsx",
-                            lineNumber: 143,
+                            lineNumber: 242,
                             columnNumber: 11
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/app/page.tsx",
-                    lineNumber: 134,
+                    lineNumber: 233,
                     columnNumber: 9
                 }, this),
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -176,7 +291,7 @@ function Home() {
                             children: "全て"
                         }, void 0, false, {
                             fileName: "[project]/app/page.tsx",
-                            lineNumber: 153,
+                            lineNumber: 252,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -185,7 +300,7 @@ function Home() {
                             children: "未完了"
                         }, void 0, false, {
                             fileName: "[project]/app/page.tsx",
-                            lineNumber: 163,
+                            lineNumber: 262,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -194,13 +309,13 @@ function Home() {
                             children: "完了"
                         }, void 0, false, {
                             fileName: "[project]/app/page.tsx",
-                            lineNumber: 173,
+                            lineNumber: 272,
                             columnNumber: 11
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/app/page.tsx",
-                    lineNumber: 152,
+                    lineNumber: 251,
                     columnNumber: 9
                 }, this),
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -210,7 +325,7 @@ function Home() {
                         children: filter === 'all' ? 'TODOがありません。新しいTODOを追加してください。' : filter === 'active' ? '未完了のTODOがありません。' : '完了したTODOがありません。'
                     }, void 0, false, {
                         fileName: "[project]/app/page.tsx",
-                        lineNumber: 188,
+                        lineNumber: 287,
                         columnNumber: 13
                     }, this) : filteredTodos.map((todo, index)=>{
                         const isNewlyAdded = newlyAddedId === todo.id && filter === 'all';
@@ -233,17 +348,17 @@ function Home() {
                                             d: "M7 2a2 2 0 1 1 0 4 2 2 0 0 1 0-4zM7 8a2 2 0 1 1 0 4 2 2 0 0 1 0-4zM7 14a2 2 0 1 1 0 4 2 2 0 0 1 0-4zM13 2a2 2 0 1 1 0 4 2 2 0 0 1 0-4zM13 8a2 2 0 1 1 0 4 2 2 0 0 1 0-4zM13 14a2 2 0 1 1 0 4 2 2 0 0 1 0-4z"
                                         }, void 0, false, {
                                             fileName: "[project]/app/page.tsx",
-                                            lineNumber: 227,
+                                            lineNumber: 326,
                                             columnNumber: 21
                                         }, this)
                                     }, void 0, false, {
                                         fileName: "[project]/app/page.tsx",
-                                        lineNumber: 222,
+                                        lineNumber: 321,
                                         columnNumber: 19
                                     }, this)
                                 }, void 0, false, {
                                     fileName: "[project]/app/page.tsx",
-                                    lineNumber: 221,
+                                    lineNumber: 320,
                                     columnNumber: 17
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
@@ -254,7 +369,7 @@ function Home() {
                                     "aria-label": todo.completed ? '未完了に戻す' : '完了にする'
                                 }, void 0, false, {
                                     fileName: "[project]/app/page.tsx",
-                                    lineNumber: 231,
+                                    lineNumber: 330,
                                     columnNumber: 17
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -265,21 +380,21 @@ function Home() {
                                             children: todo.text
                                         }, void 0, false, {
                                             fileName: "[project]/app/page.tsx",
-                                            lineNumber: 239,
+                                            lineNumber: 338,
                                             columnNumber: 19
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
                                             className: "text-sm text-gray-500 dark:text-gray-400 mt-2",
-                                            children: todo.createdAt.toLocaleString('ja-JP')
+                                            children: formatDate(todo.created_at)
                                         }, void 0, false, {
                                             fileName: "[project]/app/page.tsx",
-                                            lineNumber: 242,
+                                            lineNumber: 341,
                                             columnNumber: 19
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/app/page.tsx",
-                                    lineNumber: 238,
+                                    lineNumber: 337,
                                     columnNumber: 17
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -289,34 +404,34 @@ function Home() {
                                     children: "削除"
                                 }, void 0, false, {
                                     fileName: "[project]/app/page.tsx",
-                                    lineNumber: 246,
+                                    lineNumber: 345,
                                     columnNumber: 17
                                 }, this)
                             ]
                         }, todo.id, true, {
                             fileName: "[project]/app/page.tsx",
-                            lineNumber: 201,
+                            lineNumber: 300,
                             columnNumber: 17
                         }, this);
                     })
                 }, void 0, false, {
                     fileName: "[project]/app/page.tsx",
-                    lineNumber: 186,
+                    lineNumber: 285,
                     columnNumber: 9
                 }, this)
             ]
         }, void 0, true, {
             fileName: "[project]/app/page.tsx",
-            lineNumber: 130,
+            lineNumber: 229,
             columnNumber: 7
         }, this)
     }, void 0, false, {
         fileName: "[project]/app/page.tsx",
-        lineNumber: 129,
+        lineNumber: 228,
         columnNumber: 5
     }, this);
 }
-_s(Home, "pBQj/fT05VcLBFysO9m2u4ZvVKU=");
+_s(Home, "c/bIISpCj/2miK2mRf2spfsuDL0=");
 _c = Home;
 var _c;
 __turbopack_context__.k.register(_c, "Home");

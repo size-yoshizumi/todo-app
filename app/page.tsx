@@ -1,12 +1,14 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 interface Todo {
   id: string;
   text: string;
-  createdAt: Date;
   completed: boolean;
+  position: number;
+  created_at: string;
+  updated_at: string;
 }
 
 type Filter = 'all' | 'active' | 'completed';
@@ -17,33 +19,64 @@ export default function Home() {
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>('all');
   const [newlyAddedId, setNewlyAddedId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const handleAddTodo = () => {
+  // APIからTODOを取得
+  const fetchTodos = useCallback(async () => {
+    try {
+      const response = await fetch('/api/todos');
+      if (response.ok) {
+        const data = await response.json();
+        setTodos(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch todos:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  // 初回読み込み時にTODOを取得
+  useEffect(() => {
+    fetchTodos();
+  }, [fetchTodos]);
+
+  // 新規追加アニメーション用
+  useEffect(() => {
+    if (newlyAddedId) {
+      const timer = setTimeout(() => {
+        setNewlyAddedId(null);
+      }, 600);
+      return () => clearTimeout(timer);
+    }
+  }, [newlyAddedId]);
+
+  // TODO追加
+  const handleAddTodo = async () => {
     const trimmedText = inputText.trim();
     if (trimmedText === '') {
       return;
     }
 
-    const newTodo: Todo = {
-      id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      text: trimmedText,
-      createdAt: new Date(),
-      completed: false,
-    };
+    try {
+      const response = await fetch('/api/todos', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ text: trimmedText }),
+      });
 
-    setNewlyAddedId(newTodo.id);
-    setTodos([newTodo, ...todos]);
-    setInputText('');
-  };
-
-  useEffect(() => {
-    if (newlyAddedId) {
-      const timer = setTimeout(() => {
-        setNewlyAddedId(null);
-      }, 600); // アニメーション時間に合わせて調整
-      return () => clearTimeout(timer);
+      if (response.ok) {
+        const newTodo = await response.json();
+        setNewlyAddedId(newTodo.id);
+        setTodos([newTodo, ...todos]);
+        setInputText('');
+      }
+    } catch (error) {
+      console.error('Failed to add todo:', error);
     }
-  }, [newlyAddedId]);
+  };
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
@@ -51,9 +84,20 @@ export default function Home() {
     }
   };
 
-  const handleDeleteTodo = (id: string) => {
+  // TODO削除
+  const handleDeleteTodo = async (id: string) => {
     if (window.confirm('このTODOを削除してもよろしいですか？')) {
-      setTodos(todos.filter((todo) => todo.id !== id));
+      try {
+        const response = await fetch(`/api/todos/${id}`, {
+          method: 'DELETE',
+        });
+
+        if (response.ok) {
+          setTodos(todos.filter((todo) => todo.id !== id));
+        }
+      } catch (error) {
+        console.error('Failed to delete todo:', error);
+      }
     }
   };
 
@@ -78,7 +122,8 @@ export default function Home() {
     e.dataTransfer.dropEffect = 'move';
   };
 
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>, targetId: string) => {
+  // ドラッグ&ドロップで並び替え
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>, targetId: string) => {
     e.preventDefault();
     const draggedTodoId = e.dataTransfer.getData('text/html');
     
@@ -99,23 +144,62 @@ export default function Home() {
 
     setTodos(newTodos);
     setDraggedId(null);
+
+    // APIで並び順を更新
+    try {
+      await fetch('/api/todos/reorder', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ todoIds: newTodos.map((t) => t.id) }),
+      });
+    } catch (error) {
+      console.error('Failed to reorder todos:', error);
+    }
   };
 
-  const handleToggleComplete = (id: string) => {
+  // 完了状態の切り替え
+  const handleToggleComplete = async (id: string) => {
     const todo = todos.find((t) => t.id === id);
     if (!todo) return;
 
-    const updatedTodos = todos.map((t) =>
-      t.id === id ? { ...t, completed: !t.completed } : t
-    );
+    try {
+      const response = await fetch(`/api/todos/${id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ completed: !todo.completed }),
+      });
 
-    // "全て"フィルター選択時、完了にしたら一番上に移動
-    if (filter === 'all' && !todo.completed) {
-      const completedTodo = updatedTodos.find((t) => t.id === id);
-      const otherTodos = updatedTodos.filter((t) => t.id !== id);
-      setTodos([completedTodo!, ...otherTodos]);
-    } else {
-      setTodos(updatedTodos);
+      if (response.ok) {
+        const updatedTodo = await response.json();
+        const updatedTodos = todos.map((t) =>
+          t.id === id ? updatedTodo : t
+        );
+
+        // "全て"フィルター選択時、完了にしたら一番上に移動
+        if (filter === 'all' && !todo.completed) {
+          const completedTodo = updatedTodos.find((t) => t.id === id);
+          const otherTodos = updatedTodos.filter((t) => t.id !== id);
+          const reorderedTodos = [completedTodo!, ...otherTodos];
+          setTodos(reorderedTodos);
+
+          // 並び順を更新
+          await fetch('/api/todos/reorder', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ todoIds: reorderedTodos.map((t) => t.id) }),
+          });
+        } else {
+          setTodos(updatedTodos);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to toggle todo:', error);
     }
   };
 
@@ -124,6 +208,21 @@ export default function Home() {
     if (filter === 'completed') return todo.completed;
     return true;
   });
+
+  // 日時のフォーマット
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleString('ja-JP');
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background text-foreground p-8 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-gray-500">読み込み中...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background text-foreground p-8">
@@ -240,7 +339,7 @@ export default function Home() {
                     {todo.text}
                   </p>
                   <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
-                    {todo.createdAt.toLocaleString('ja-JP')}
+                    {formatDate(todo.created_at)}
                   </p>
                 </div>
                 <button
@@ -259,5 +358,3 @@ export default function Home() {
     </div>
   );
 }
-
-
